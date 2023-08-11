@@ -1,13 +1,14 @@
-use std::{error::Error, io::{Stdout, self}, time::{Duration, Instant}, fmt::Display, net::{TcpListener, SocketAddrV4, SocketAddr, TcpStream}};
+use std::io::Stdout;
 
-use crate::app::{App, LocalTabs, NetworkEvent};
-use crossterm::{terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode}, execute, event::{self, Event, KeyCode, KeyEventKind}};
-use ratatui::{Terminal, prelude::{CrosstermBackend, Layout, Constraint, Rect, Direction, Alignment}, widgets::{Paragraph, Tabs, Borders, Block, BorderType, block::{Title, Position}, List, Table, Row, Cell, Padding}, Frame, text::{self, Text}, style::{Style, Color}};
-use strum_macros::Display;
+use crate::app::{App, LocalTabs};
 
-use tui_term::{widget::PseudoTerminal};
-use vt100;
-
+use ratatui::{
+    prelude::{Constraint, CrosstermBackend, Direction, Layout, Rect},
+    style::{Color, Style},
+    text::{self},
+    widgets::{Block, BorderType, Borders, Cell, Padding, Paragraph, Row, Table, Tabs},
+    Frame,
+};
 
 pub fn draw_listeners(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, area: Rect) {
     let border_color = match app.active_tab {
@@ -15,30 +16,39 @@ pub fn draw_listeners(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, ar
         _ => Color::DarkGray,
     };
 
-    let widget = Table::new(
-            app.listeners.iter().enumerate().map(|(id, l)| {
-                let mut row = Row::new([Cell::from(id.to_string()), Cell::from(l.port.to_string()), Cell::from(l.status.to_string())]);
+    let widget = Table::new(app.listeners.iter().enumerate().map(|(id, l)| {
+        let mut row = Row::new([
+            Cell::from(id.to_string()),
+            Cell::from(l.port.to_string()),
+            Cell::from(l.status.to_string()),
+        ]);
 
-                if id == app.listener_selection_index {
-                    row = row.style(Style::default().fg(Color::Green));
-                }
+        if id == app.listener_selection_index {
+            row = row.style(Style::default().fg(Color::Green));
+        }
 
-                return row;
-            })
-        )
-        .header(
-            Row::new([Cell::from("id"), Cell::from("Port"), Cell::from("Status")])
-            .style(Style::default().fg(Color::DarkGray))
-        )
-        .widths([Constraint::Length(3), Constraint::Length(10), Constraint::Length(10)].as_ref())
-        .block(
-            Block::default()
+        row
+    }))
+    .header(
+        Row::new([Cell::from("id"), Cell::from("Port"), Cell::from("Status")])
+            .style(Style::default().fg(Color::DarkGray)),
+    )
+    .widths(
+        [
+            Constraint::Length(3),
+            Constraint::Length(10),
+            Constraint::Length(10),
+        ]
+        .as_ref(),
+    )
+    .block(
+        Block::default()
             .borders(Borders::ALL)
             .title("Listeners")
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color))
-            .padding(Padding::new(1, 1, 0, 0))
-        );
+            .padding(Padding::new(1, 1, 0, 0)),
+    );
 
     f.render_widget(widget, area);
 }
@@ -50,25 +60,32 @@ pub fn draw_sessions(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, are
     };
 
     let rows = {
-
-        let result: Vec<Row> = app.sessions.iter().enumerate().map(|(id, s)| {
-            Row::new([Cell::from(id.to_string()), Cell::from(s.id.to_string())])
-        }).collect();
+        let result: Vec<Row> = app
+            .sessions
+            .iter()
+            .enumerate()
+            .map(|(id, s)| Row::new([Cell::from(id.to_string()), Cell::from(s.id.to_string())]))
+            .collect();
 
         result
     };
 
-    let widget = Table::new(
-            rows
-        )
+    let widget = Table::new(rows)
         .header(Row::new([Cell::from("i"), Cell::from("id")]))
-        .widths([Constraint::Length(10), Constraint::Length(10), Constraint::Length(10)].as_ref())
+        .widths(
+            [
+                Constraint::Length(10),
+                Constraint::Length(10),
+                Constraint::Length(10),
+            ]
+            .as_ref(),
+        )
         .block(
             Block::default()
-            .borders(Borders::ALL)
-            .title("Sessions")
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(border_color))
+                .borders(Borders::ALL)
+                .title("Sessions")
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(border_color)),
         );
 
     f.render_widget(widget, area);
@@ -92,14 +109,12 @@ pub fn draw_remote(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, area:
             // let mut terminal_widget = PseudoTerminal::new(&mut terminal);
 
             f.render_widget(Paragraph::new(format!("Connected to {}", session.id)), area);
-        },
+        }
         None => {
             let paragraph = Paragraph::new("Remote terminal goes here");
             f.render_widget(paragraph, area);
         }
     }
-
-
 }
 
 pub fn draw_main(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App) {
@@ -107,15 +122,23 @@ pub fn draw_main(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App) {
         .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
         .split(f.size());
 
-    let titles = app.tabs.titles.iter().map(|s| text::Line::from(*s)).collect();
+    let titles = app
+        .tabs
+        .titles
+        .iter()
+        .map(|s| text::Line::from(*s))
+        .collect();
 
     let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
         .highlight_style(Style::default().fg(Color::Green))
         .select(app.tabs.index);
 
     f.render_widget(tabs, chunks[0]);
-
 
     match app.tabs.index {
         0 => {
@@ -127,5 +150,3 @@ pub fn draw_main(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App) {
         _ => {}
     }
 }
-
-

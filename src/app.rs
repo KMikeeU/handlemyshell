@@ -1,14 +1,13 @@
-use std::{net::{TcpListener, SocketAddr, TcpStream}, sync::{Arc, Mutex}, thread, rc::Rc};
+use std::{
+    net::{SocketAddr, TcpListener},
+    sync::Arc,
+    thread,
+};
 
-use crossbeam::channel::{Sender, Receiver, unbounded};
+use crossbeam::channel::{unbounded, Receiver, Sender};
 use strum_macros::Display;
 
-use crate::session::{SessionStreams, listen, Session};
-
-
-
-
-
+use crate::session::{listen, Session, SessionStreams};
 
 pub struct App<'a> {
     pub tabs: TabsState<'a>,
@@ -22,18 +21,18 @@ pub struct App<'a> {
     pub session_selection_index: usize,
     pub session: Option<Arc<Session>>,
 
-    pub network_bus: NetworkBus
+    pub network_bus: NetworkBus,
 }
 
 #[derive(Clone)]
 pub struct NetworkBus {
     pub sender: Sender<NetworkEvent>,
-    pub receiver: Receiver<NetworkEvent>
+    pub receiver: Receiver<NetworkEvent>,
 }
 
 impl Default for NetworkBus {
     fn default() -> Self {
-        let (s,r) = unbounded();
+        let (s, r) = unbounded();
         Self {
             sender: s,
             receiver: r,
@@ -41,10 +40,9 @@ impl Default for NetworkBus {
     }
 }
 
-pub enum NetworkEvent { 
+pub enum NetworkEvent {
     NewSession(SessionStreams),
 }
-
 
 impl<'a> App<'a> {
     pub fn new() -> App<'a> {
@@ -78,43 +76,34 @@ impl<'a> App<'a> {
     }
 
     pub fn on_create(&mut self) {
-        if self.tabs.index == 0 {
-            if self.active_tab == LocalTabs::Listeners {
-                let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 1337)));
-                
-                match listener {
-                    Ok(listener) => {
-                        self.listeners.push(Listener {
-                            port: listener.local_addr().unwrap().port(),
-                            status: ListenerStatus::Listening,
-                        });
+        if self.tabs.index == 0 && self.active_tab == LocalTabs::Listeners {
+            let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 1337)));
 
+            match listener {
+                Ok(listener) => {
+                    self.listeners.push(Listener {
+                        port: listener.local_addr().unwrap().port(),
+                        status: ListenerStatus::Listening,
+                    });
 
-                        let network_bus = self.network_bus.clone();
-                        thread::spawn(move || {
-                            listen(listener, network_bus);
-                        });
-                        
-
-
-                    },
-                    Err(_) => todo!(),
+                    let network_bus = self.network_bus.clone();
+                    thread::spawn(move || {
+                        listen(listener, network_bus);
+                    });
                 }
-
+                Err(_) => todo!(),
             }
         }
     }
 
     pub fn on_space(&mut self) {
-        if self.tabs.index == 0 {
-            if self.active_tab == LocalTabs::Sessions {
-                let session = match self.sessions.get(self.session_selection_index) {
-                    Some(session) => session,
-                    None => return,
-                };
+        if self.tabs.index == 0 && self.active_tab == LocalTabs::Sessions {
+            let session = match self.sessions.get(self.session_selection_index) {
+                Some(session) => session,
+                None => return,
+            };
 
-                self.session = Some(session.clone());
-            }
+            self.session = Some(session.clone());
         }
     }
 
@@ -123,36 +112,32 @@ impl<'a> App<'a> {
     }
 
     pub fn on_delete(&mut self) {
-        if self.tabs.index == 0 {
-            if self.active_tab == LocalTabs::Listeners {
-                if self.listener_selection_index < self.listeners.len() {
-                    self.listeners.remove(self.listener_selection_index);
-                }
-            }
+        if self.tabs.index == 0
+            && self.active_tab == LocalTabs::Listeners
+            && self.listener_selection_index < self.listeners.len()
+        {
+            self.listeners.remove(self.listener_selection_index);
         }
     }
 
     pub fn on_down(&mut self) {
-        if self.tabs.index == 0 {
-            if self.active_tab == LocalTabs::Listeners {
-                if self.listener_selection_index < self.listeners.len() - 1 {
-                    self.listener_selection_index += 1;
-                }
-            }
+        if self.tabs.index == 0
+            && self.active_tab == LocalTabs::Listeners
+            && self.listener_selection_index < self.listeners.len() - 1
+        {
+            self.listener_selection_index += 1;
         }
     }
 
     pub fn on_up(&mut self) {
-        if self.tabs.index == 0 {
-            if self.active_tab == LocalTabs::Listeners {
-                if self.listener_selection_index > 0 {
-                    self.listener_selection_index -= 1;
-                }
-            }
+        if self.tabs.index == 0
+            && self.active_tab == LocalTabs::Listeners
+            && self.listener_selection_index > 0
+        {
+            self.listener_selection_index -= 1;
         }
     }
 }
-
 
 #[derive(Debug, Display)]
 #[strum(serialize_all = "UPPERCASE")]
@@ -160,14 +145,13 @@ pub enum ListenerStatus {
     Starting,
     Listening,
     Closed,
-    Error
+    Error,
 }
 
 pub struct Listener {
     pub port: u16,
     pub status: ListenerStatus,
 }
-
 
 #[derive(PartialEq, Debug)]
 pub enum LocalTabs {
@@ -193,5 +177,3 @@ impl<'a> TabsState<'a> {
         }
     }
 }
-
-

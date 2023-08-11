@@ -1,9 +1,12 @@
-use std::{net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, thread, io::{Read, Write}};
+use std::{
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    thread,
+};
 
-use crossbeam::channel::{bounded, unbounded, Sender, Receiver};
+use crossbeam::channel::{unbounded, Receiver, Sender};
 
-use crate::app::{App, NetworkEvent, NetworkBus};
-
+use crate::app::{NetworkBus, NetworkEvent};
 
 pub struct Session {
     pub id: usize,
@@ -18,14 +21,13 @@ pub struct SessionStreams {
 
 impl SessionStreams {
     pub fn new() -> Self {
-        let (s,r) = unbounded();
+        let (s, r) = unbounded();
         Self {
             sender: s,
             receiver: r,
         }
     }
 }
-
 
 pub fn handle_connection(session: SessionStreams, stream: TcpStream) {
     let mut write_stream = stream.try_clone().unwrap();
@@ -38,7 +40,7 @@ pub fn handle_connection(session: SessionStreams, stream: TcpStream) {
                 Ok(0) => {
                     break;
                 }
-                Ok(n) => {
+                Ok(_n) => {
                     let cl = buf.to_vec();
                     session.sender.send(cl).unwrap();
                 }
@@ -47,38 +49,36 @@ pub fn handle_connection(session: SessionStreams, stream: TcpStream) {
                     break;
                 }
             }
-
-            
         }
     });
 
     thread::spawn(move || {
-        for i in 0..session.receiver.len() {
-            let mut buf = session.receiver.recv().expect("recv from channel failed, eventhough the length has been checked");
-            write_stream.write(&mut buf).unwrap();
+        for _ in 0..session.receiver.len() {
+            let buf = session
+                .receiver
+                .recv()
+                .expect("recv from channel failed, eventhough the length has been checked");
+            write_stream.write_all(&buf).unwrap();
         }
     });
-
-
 }
 
-
-pub fn listen(mut listener: TcpListener, network_bus: NetworkBus) {
-
+pub fn listen(listener: TcpListener, network_bus: NetworkBus) {
     loop {
         let stream = listener.accept();
 
         match stream {
-            Ok((stream, addr)) => {
+            Ok((stream, _addr)) => {
                 let session = SessionStreams::new();
-                
-                network_bus.sender.send(NetworkEvent::NewSession(session.clone())).unwrap();
 
+                network_bus
+                    .sender
+                    .send(NetworkEvent::NewSession(session.clone()))
+                    .unwrap();
 
                 handle_connection(session.clone(), stream);
             }
-            Err(e) => {
-            }
+            Err(_e) => {}
         }
     }
 }
