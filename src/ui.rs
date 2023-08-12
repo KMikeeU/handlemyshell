@@ -129,15 +129,12 @@ pub fn draw_local(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, area: 
 pub fn draw_remote(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, area: Rect) {
     match app.session.as_mut() {
         Some(session) => {
-            // let mut terminal = session.terminal.lock().unwrap();
-
-            // let mut terminal_widget = PseudoTerminal::new(&mut terminal);
-
             app.remote_size = TerminalSize::new(area.y, area.x);
 
             {
-                let mut term = session.term.lock().unwrap();
+                let term = session.term.lock().unwrap();
     
+                // TODO: Fix this
                 // if term.screen().size().0 != area.x && term.screen().size().1 != area.y {
                 //     term.set_size(area.x, area.y);
                 // }
@@ -149,10 +146,9 @@ pub fn draw_remote(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, area:
                 f.render_widget(pseudo_term, area);
             }
 
-            // f.render_widget(Paragraph::new(format!("Connected to {}", session.id)), area);
         }
         None => {
-            let paragraph = Paragraph::new("Remote terminal goes here");
+            let paragraph = Paragraph::new("You aren't connected to a session yet. Switch to the local tab and select a session by pressing space.");
             f.render_widget(paragraph, area);
         }
     }

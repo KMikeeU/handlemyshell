@@ -1,14 +1,14 @@
 use std::{
     net::{SocketAddr, TcpListener},
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread,
 };
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use strum_macros::Display;
 
-use crate::session::{listen, Session, SessionStreams, SessionBus};
+use crate::session::{listen, Session, SessionBus};
 
 pub struct App<'a> {
     pub tabs: TabsState<'a>,
@@ -255,6 +255,7 @@ pub enum LocalTabs {
     Sessions,
 }
 
+// TODO: Make this an enum, like LocalTabs
 pub struct TabsState<'a> {
     pub titles: Vec<&'a str>,
     pub index: usize,

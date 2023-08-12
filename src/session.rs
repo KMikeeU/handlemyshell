@@ -60,7 +60,8 @@ pub fn handle_connection(session: SessionBus, stream: TcpStream) {
                     let cl = buf.to_vec();
                     session.c2s.sender.send(cl).unwrap();
                 }
-                Err(e) => {
+                Err(_) => {
+                    // TODO: TCP Stream has closed, we should probably remove this session gracefully
                     break;
                 }
             }
