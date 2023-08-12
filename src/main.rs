@@ -1,8 +1,8 @@
 use std::{
     error::Error,
     io::{self, Stdout},
-    sync::Arc,
-    time::{Duration, Instant},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant}, thread,
 };
 
 use app::App;
@@ -15,6 +15,7 @@ use ratatui::{prelude::CrosstermBackend, Terminal};
 use session::Session;
 
 use ui::*;
+use vt100::Parser;
 
 mod app;
 mod session;
@@ -68,13 +69,34 @@ fn run(
 
             match event {
                 app::NetworkEvent::NewSession(s) => {
+                    s.s2c.sender.send(b"script -qc /usr/bin/bash /dev/null 2>&1\n".to_vec()).unwrap();
+                    s.s2c.sender.send(b"stty -echo nl\n".to_vec()).unwrap();
+                    // s.s2c.sender.send(b"stty -echo nl lnext ^V; export PS1='$>';\n".to_vec()).unwrap();
+
                     app.highest_session_number += 1;
                     let session = Session {
                         id: app.highest_session_number,
-                        streams: s,
+                        bus: s,
+                        // TODO: make these numbers adjust to the terminal size
+                        term: Mutex::new(Parser::new(20, 80, 0)),
                     };
 
-                    app.sessions.push(Arc::new(session))
+                    let session = Arc::new(session);
+
+                    // Receive from channel and update PTY
+                    {
+                        let rx = session.bus.c2s.receiver.clone();
+                        let session = session.clone();
+
+                        thread::spawn(move || {
+                            while let Ok(buf) = rx.recv() {
+                                session.term.lock().unwrap().process(&buf);
+                            }
+                        });
+                    }
+
+
+                    app.sessions.push(session);
                 }
             }
         }
@@ -82,36 +104,42 @@ fn run(
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('a') if key.modifiers == event::KeyModifiers::CONTROL => {
-                            app.on_next();
+                    // In all cases, CTRL + a switches between local and remote
+                    if key.code == KeyCode::Char('a') && key.modifiers == event::KeyModifiers::CONTROL {
+                        app.on_next();
+                    } else if app.tabs.index == 1 {
+                        // We're on the remote, pass through the events
+                        app.on_remote_interact(key);
+                    } else {
+                        match key.code {
+                            KeyCode::Char('q') => {
+                                return Ok(());
+                            }
+                            KeyCode::Tab => {
+                                app.on_tab();
+                            }
+                            KeyCode::Down => {
+                                app.on_down();
+                            }
+                            KeyCode::Up => {
+                                app.on_up();
+                            }
+                            KeyCode::Char(' ') => {
+                                app.on_space();
+                            }
+                            KeyCode::Enter => {
+                                app.on_enter();
+                            }
+                            KeyCode::Char('c') => {
+                                app.on_create();
+                            }
+                            KeyCode::Char('d') => {
+                                app.on_delete();
+                            }
+                            _ => {}
                         }
-                        KeyCode::Char('q') => {
-                            return Ok(());
-                        }
-                        KeyCode::Tab => {
-                            app.on_tab();
-                        }
-                        KeyCode::Down => {
-                            app.on_down();
-                        }
-                        KeyCode::Up => {
-                            app.on_up();
-                        }
-                        KeyCode::Char(' ') => {
-                            app.on_space();
-                        }
-                        KeyCode::Enter => {
-                            app.on_enter();
-                        }
-                        KeyCode::Char('c') => {
-                            app.on_create();
-                        }
-                        KeyCode::Char('d') => {
-                            app.on_delete();
-                        }
-                        _ => {}
                     }
+
                 }
             }
         }

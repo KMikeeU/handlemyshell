@@ -1,6 +1,6 @@
 use std::io::Stdout;
 
-use crate::app::{App, LocalTabs};
+use crate::app::{App, LocalTabs, TerminalSize};
 
 use ratatui::{
     prelude::{Constraint, CrosstermBackend, Direction, Layout, Rect},
@@ -9,6 +9,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Cell, Padding, Paragraph, Row, Table, Tabs},
     Frame,
 };
+use tui_term::widget::PseudoTerminal;
 
 pub fn draw_listeners(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, area: Rect) {
     let border_color = match app.active_tab {
@@ -23,8 +24,8 @@ pub fn draw_listeners(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, ar
             Cell::from(l.status.to_string()),
         ]);
 
-        if id == app.listener_selection_index {
-            row = row.style(Style::default().fg(Color::Green));
+        if app.active_tab == LocalTabs::Listeners && id == app.listener_selection_index {
+            row = row.style(Style::default().bg(Color::Green));
         }
 
         row
@@ -64,14 +65,37 @@ pub fn draw_sessions(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, are
             .sessions
             .iter()
             .enumerate()
-            .map(|(id, s)| Row::new([Cell::from(id.to_string()), Cell::from(s.id.to_string())]))
+            .map(|(id, s)| {
+                // If this row is selected, make it's text yellow and add a * to the left of it
+                let is_selected = match &app.session {
+                    Some(selected_session) => s.id == selected_session.id,
+                    None => false,
+                };
+
+                let row = if is_selected {
+                    Row::new([Cell::from("*"), Cell::from(s.id.to_string())])
+                        .style(Style::default().fg(Color::Yellow))
+                } else {
+                    Row::new([Cell::from(id.to_string()), Cell::from(s.id.to_string())])
+                };
+
+
+                if app.active_tab == LocalTabs::Sessions && id == app.session_selection_index {
+                    row.style(Style::default().bg(Color::Green))
+                } else {
+                    row
+                }
+            })
             .collect();
 
         result
     };
 
     let widget = Table::new(rows)
-        .header(Row::new([Cell::from("i"), Cell::from("id")]))
+        .header(
+            Row::new([Cell::from("i"), Cell::from("id")])
+            .style(Style::default().fg(Color::DarkGray))
+        )
         .widths(
             [
                 Constraint::Length(10),
@@ -85,7 +109,8 @@ pub fn draw_sessions(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, are
                 .borders(Borders::ALL)
                 .title("Sessions")
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(border_color)),
+                .border_style(Style::default().fg(border_color))
+                .padding(Padding::new(1, 1, 0, 0)),
         );
 
     f.render_widget(widget, area);
@@ -108,7 +133,23 @@ pub fn draw_remote(f: &mut Frame<CrosstermBackend<Stdout>>, app: &mut App, area:
 
             // let mut terminal_widget = PseudoTerminal::new(&mut terminal);
 
-            f.render_widget(Paragraph::new(format!("Connected to {}", session.id)), area);
+            app.remote_size = TerminalSize::new(area.y, area.x);
+
+            {
+                let mut term = session.term.lock().unwrap();
+    
+                // if term.screen().size().0 != area.x && term.screen().size().1 != area.y {
+                //     term.set_size(area.x, area.y);
+                // }
+                
+    
+                let screen = term.screen();
+                let pseudo_term = PseudoTerminal::new(screen);
+    
+                f.render_widget(pseudo_term, area);
+            }
+
+            // f.render_widget(Paragraph::new(format!("Connected to {}", session.id)), area);
         }
         None => {
             let paragraph = Paragraph::new("Remote terminal goes here");

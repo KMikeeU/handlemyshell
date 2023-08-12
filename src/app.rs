@@ -1,17 +1,20 @@
 use std::{
     net::{SocketAddr, TcpListener},
-    sync::Arc,
+    sync::{Arc, Mutex},
     thread,
 };
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState};
 use strum_macros::Display;
 
-use crate::session::{listen, Session, SessionStreams};
+use crate::session::{listen, Session, SessionStreams, SessionBus};
 
 pub struct App<'a> {
     pub tabs: TabsState<'a>,
     pub active_tab: LocalTabs,
+
+    pub remote_size: TerminalSize,
 
     pub listeners: Vec<Listener>,
     pub listener_selection_index: usize,
@@ -22,6 +25,24 @@ pub struct App<'a> {
     pub session: Option<Arc<Session>>,
 
     pub network_bus: NetworkBus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TerminalSize {
+    pub cols: u16,
+    pub rows: u16,
+}
+
+impl TerminalSize {
+    pub fn new(cols: u16, rows: u16) -> Self {
+        Self { cols, rows }
+    }
+}
+
+impl Default for TerminalSize {
+    fn default() -> Self {
+        Self { cols: 80, rows: 24 }
+    }
 }
 
 #[derive(Clone)]
@@ -41,7 +62,7 @@ impl Default for NetworkBus {
 }
 
 pub enum NetworkEvent {
-    NewSession(SessionStreams),
+    NewSession(SessionBus),
 }
 
 impl<'a> App<'a> {
@@ -59,6 +80,9 @@ impl<'a> App<'a> {
             session_selection_index: 0,
             session: None,
             network_bus: Default::default(),
+
+            // TODO: Change this to the actual terminal size
+            remote_size: Default::default(),
         }
     }
 
@@ -97,18 +121,25 @@ impl<'a> App<'a> {
     }
 
     pub fn on_space(&mut self) {
-        if self.tabs.index == 0 && self.active_tab == LocalTabs::Sessions {
-            let session = match self.sessions.get(self.session_selection_index) {
-                Some(session) => session,
-                None => return,
-            };
+        if self.tabs.index == 0 {
+            match self.active_tab {
+                LocalTabs::Sessions => {
+                    let session = match self.sessions.get(self.session_selection_index) {
+                        Some(session) => session,
+                        None => return,
+                    };
 
-            self.session = Some(session.clone());
+                    self.session = Some(session.clone());
+                },
+                LocalTabs::Listeners => {
+                    
+                }
+            }
         }
     }
 
     pub fn on_enter(&mut self) {
-        todo!()
+        // todo!()
     }
 
     pub fn on_delete(&mut self) {
@@ -121,20 +152,85 @@ impl<'a> App<'a> {
     }
 
     pub fn on_down(&mut self) {
-        if self.tabs.index == 0
-            && self.active_tab == LocalTabs::Listeners
-            && self.listener_selection_index < self.listeners.len() - 1
-        {
-            self.listener_selection_index += 1;
+        if self.tabs.index == 0 {
+            match self.active_tab {
+                LocalTabs::Listeners => {
+                    if self.listener_selection_index < self.listeners.len() - 1 {
+                        self.listener_selection_index += 1;
+                    }
+                },
+                LocalTabs::Sessions => {
+                    if self.session_selection_index < self.sessions.len() - 1 {
+                        self.session_selection_index += 1;
+                    }
+                },
+            }
         }
     }
 
     pub fn on_up(&mut self) {
-        if self.tabs.index == 0
-            && self.active_tab == LocalTabs::Listeners
-            && self.listener_selection_index > 0
-        {
-            self.listener_selection_index -= 1;
+        if self.tabs.index == 0 {
+            match self.active_tab {
+                LocalTabs::Listeners => {
+                    if self.listener_selection_index > 0 {
+                        self.listener_selection_index -= 1;
+                    }
+                },
+                LocalTabs::Sessions => {
+                    if self.session_selection_index > 0 {
+                        self.session_selection_index -= 1;
+                    }
+                },
+            }
+        }
+    }
+
+    pub fn on_remote_interact(&mut self, input_key: KeyEvent) {
+        // TODO: Fill these match arms!
+
+        if input_key.kind != KeyEventKind::Press {
+            return;
+        }
+
+
+        if let Some(session) = &self.session {
+            let result = match input_key.code {
+                KeyCode::Backspace => {
+                    vec![8]
+                },
+                KeyCode::Enter => {
+                    vec![b'\n']
+                },
+                KeyCode::Left => todo!(),
+                KeyCode::Right => todo!(),
+                KeyCode::Up => todo!(),
+                KeyCode::Down => todo!(),
+                KeyCode::Home => todo!(),
+                KeyCode::End => todo!(),
+                KeyCode::PageUp => todo!(),
+                KeyCode::PageDown => todo!(),
+                KeyCode::Tab => todo!(),
+                KeyCode::BackTab => todo!(),
+                KeyCode::Delete => todo!(),
+                KeyCode::Insert => todo!(),
+                KeyCode::F(_) => todo!(),
+                KeyCode::Char(x) => {
+                    vec![x as u8]
+                },
+                KeyCode::Null => todo!(),
+                KeyCode::Esc => todo!(),
+                KeyCode::CapsLock => todo!(),
+                KeyCode::ScrollLock => todo!(),
+                KeyCode::NumLock => todo!(),
+                KeyCode::PrintScreen => todo!(),
+                KeyCode::Pause => todo!(),
+                KeyCode::Menu => todo!(),
+                KeyCode::KeypadBegin => todo!(),
+                KeyCode::Media(_) => todo!(),
+                KeyCode::Modifier(_) => todo!(),
+            };
+
+            let _r = session.bus.s2c.sender.send(result);
         }
     }
 }
